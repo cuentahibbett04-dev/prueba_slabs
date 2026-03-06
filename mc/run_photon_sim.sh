@@ -24,7 +24,7 @@ done
 mkdir -p "$out"
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-opengate_python="/home/fer/fer/ProtonAI/PrAI/.venv/bin/python"
+opengate_python="${OPENGATE_PYTHON:-python3}"
 sample_root="$(dirname "$out")"
 sample_id="$(basename "$sample_root")"
 ct_mhd="$repo_root/mc/generated/$sample_id/slab_ct.mhd"
