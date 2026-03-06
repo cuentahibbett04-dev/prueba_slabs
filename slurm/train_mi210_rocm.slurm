@@ -12,6 +12,13 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST_PATH="${MANIFEST_PATH:-$SCRIPT_DIR/manifest.env}"
+if [[ -f "$MANIFEST_PATH" ]]; then
+  # shellcheck disable=SC1090
+  source "$MANIFEST_PATH"
+fi
+
 # Optional module init (won't fail if modules are unavailable)
 if [[ -f /etc/profile.d/modules.sh ]]; then
   source /etc/profile.d/modules.sh
