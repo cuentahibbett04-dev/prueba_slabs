@@ -13,6 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST_PATH="${MANIFEST_PATH:-$SCRIPT_DIR/manifest.env}"
 if [[ -f "$MANIFEST_PATH" ]]; then
   # shellcheck disable=SC1090
@@ -21,11 +22,17 @@ if [[ -f "$MANIFEST_PATH" ]]; then
   set -u
 fi
 
-PROJECT_DIR=${PROJECT_DIR:-$HOME/prueba_slabs}
+PROJECT_DIR=${PROJECT_DIR:-$REPO_DIR}
 DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
 MC_ROOT=${MC_ROOT:-$DATA_DIR/mc_runs_opengate_photon_1000}
 export TMPDIR=${TMPDIR:-/tmp}
 mkdir -p "$TMPDIR" 2>/dev/null || true
+SIM_SCRIPT="$REPO_DIR/mc/run_photon_sim.sh"
+
+if [[ ! -f "$SIM_SCRIPT" ]]; then
+  echo "ERROR: simulation script not found: $SIM_SCRIPT" >&2
+  exit 1
+fi
 
 # Set this in sbatch environment if python3 is not your OpenGATE environment python.
 # Example:
@@ -51,7 +58,7 @@ run_if_missing() {
   local events="$2"
   local seed="$3"
   if [[ ! -f "$out_dir/dose.npy" ]]; then
-    ./mc/run_photon_sim.sh --energy "$energy" --events "$events" --out "$out_dir" --seed "$seed"
+    bash "$SIM_SCRIPT" --energy "$energy" --events "$events" --out "$out_dir" --seed "$seed"
   fi
 }
 

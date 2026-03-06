@@ -13,6 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST_PATH="${MANIFEST_PATH:-$SCRIPT_DIR/manifest.env}"
 if [[ -f "$MANIFEST_PATH" ]]; then
   # shellcheck disable=SC1090
@@ -28,7 +29,7 @@ if [[ -f /etc/profile.d/modules.sh ]]; then
   module load rocm/5.7 || module load rocm || true
 fi
 
-PROJECT_DIR=${PROJECT_DIR:-$HOME/prueba_slabs}
+PROJECT_DIR=${PROJECT_DIR:-$REPO_DIR}
 DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
 export TMPDIR=${TMPDIR:-/tmp}
 mkdir -p "$TMPDIR" 2>/dev/null || true
