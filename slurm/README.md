@@ -1,6 +1,6 @@
 # SLURM Quickstart (Cluster)
 
-These scripts are intended for cluster execution with data in `$SCRATCH/prueba_slabs_data`.
+These scripts are intended for cluster execution with data in `${SCRATCH:-$HOME}/prueba_slabs_data`.
 
 ## 0) One-time setup: manifest file (no sbatch env vars required)
 
@@ -14,6 +14,14 @@ Set at least:
 - `PROJECT_DIR`
 - `DATA_DIR`
 - `OPENGATE_PYTHON`
+
+Recommended safe values (work even when `SCRATCH` is not defined):
+
+```bash
+PROJECT_DIR=$HOME/prueba_slabs
+DATA_DIR=${SCRATCH:-$HOME}/prueba_slabs_data
+TMPDIR=${TMPDIR:-/tmp}
+```
 
 ## 1) Generate MC data with array job (1000 samples, 200 concurrent)
 

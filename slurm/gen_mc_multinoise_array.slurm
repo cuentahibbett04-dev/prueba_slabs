@@ -16,12 +16,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_PATH="${MANIFEST_PATH:-$SCRIPT_DIR/manifest.env}"
 if [[ -f "$MANIFEST_PATH" ]]; then
   # shellcheck disable=SC1090
+  set +u
   source "$MANIFEST_PATH"
+  set -u
 fi
 
 PROJECT_DIR=${PROJECT_DIR:-$HOME/prueba_slabs}
-DATA_DIR=${DATA_DIR:-$SCRATCH/prueba_slabs_data}
+DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
 MC_ROOT=${MC_ROOT:-$DATA_DIR/mc_runs_opengate_photon_1000}
+export TMPDIR=${TMPDIR:-/tmp}
+mkdir -p "$TMPDIR" 2>/dev/null || true
 
 # Set this in sbatch environment if python3 is not your OpenGATE environment python.
 # Example:

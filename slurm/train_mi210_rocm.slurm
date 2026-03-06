@@ -16,7 +16,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_PATH="${MANIFEST_PATH:-$SCRIPT_DIR/manifest.env}"
 if [[ -f "$MANIFEST_PATH" ]]; then
   # shellcheck disable=SC1090
+  set +u
   source "$MANIFEST_PATH"
+  set -u
 fi
 
 # Optional module init (won't fail if modules are unavailable)
@@ -27,7 +29,9 @@ if [[ -f /etc/profile.d/modules.sh ]]; then
 fi
 
 PROJECT_DIR=${PROJECT_DIR:-$HOME/prueba_slabs}
-DATA_DIR=${DATA_DIR:-$SCRATCH/prueba_slabs_data}
+DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
+export TMPDIR=${TMPDIR:-/tmp}
+mkdir -p "$TMPDIR" 2>/dev/null || true
 
 cd "$PROJECT_DIR"
 source .venv/bin/activate
