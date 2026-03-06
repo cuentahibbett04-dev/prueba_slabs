@@ -1,0 +1,10 @@
+{
+  "seed": 42,
+  "energies_mev": [1.0, 2.0, 4.0, 6.0],
+  "low_events_levels": [2000, 5000, 10000, 20000],
+  "events_high": 100000,
+  "n_geometries": 2,
+  "noisy_repeats_per_level": 1,
+  "simulator_command_template": "./mc/run_photon_sim.sh --energy {energy_mev} --events {events} --out {output_dir} --seed {seed}",
+  "output_root": "multinoise_deepmc_small"
+}

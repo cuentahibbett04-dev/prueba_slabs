@@ -1,0 +1,15 @@
+{
+  "seed": 42,
+  "energies_mev": [1.0, 2.0, 4.0, 6.0, 8.0],
+  "replicas_per_energy": 200,
+  "max_parallel": 8,
+  "events_low": 2000,
+  "events_high": 100000,
+  "simulator_command_template": "./mc/run_photon_sim.sh --energy {energy_mev} --events {events} --out {output_dir} --seed {seed}",
+  "expects": {
+    "dose_filename": "dose.npy",
+    "spr_filename": "spr.npy",
+    "metadata_filename": "meta.json"
+  },
+  "output_root": "mc_runs_opengate_photon_1000"
+}

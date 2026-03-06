@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "energies_mev": [70, 80, 90, 100, 110, 120, 130, 140, 150],
+  "replicas_per_energy": 20,
+  "events_low": 2000,
+  "events_high": 100000,
+  "simulator_command_template": "./run_proton_sim.sh --energy {energy_mev} --events {events} --out {output_dir} --seed {seed}",
+  "expects": {
+    "dose_filename": "dose.npy",
+    "spr_filename": "spr.npy",
+    "metadata_filename": "meta.json"
+  },
+  "output_root": "mc_runs"
+}

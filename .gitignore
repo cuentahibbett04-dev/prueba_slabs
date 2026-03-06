@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual env
+.venv/
+
+# OS/editor
+.DS_Store
+.vscode/
+
+# Project outputs (large)
+artifacts/
+artifacts_*/
+data/
+data_*/
+mc_runs/
+mc_runs_*/
+mini_deepmc_*/
+multinoise_*/
+mc/generated/
+
+# Keep source and configuration tracked
+!mc/
+!scripts/
+!src/
+
+# Optional logs
+*.log

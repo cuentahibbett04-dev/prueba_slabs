@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Example wrapper expected by scripts/run_mc_campaign.py.
+# Replace the body with your own Geant4/GATE application call.
+# Required outputs per run:
+#   $out/dose.npy
+# Optional:
+#   $out/spr.npy
+
+energy=""
+events=""
+out=""
+seed=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --energy)
+      energy="$2"; shift 2 ;;
+    --events)
+      events="$2"; shift 2 ;;
+    --out)
+      out="$2"; shift 2 ;;
+    --seed)
+      seed="$2"; shift 2 ;;
+    *)
+      echo "Unknown arg: $1"; exit 2 ;;
+  esac
+done
+
+mkdir -p "$out"
+
+# TODO: replace this block with real Monte Carlo simulation.
+# Example pseudo command:
+# ./your_geant4_app --macro mc/templates/proton_slab.mac \
+#   --energy "$energy" --events "$events" --seed "$seed" --out "$out"
+
+# Temporary placeholder to prevent accidental use without replacement.
+echo "Implement your MC command in run_proton_sim.sh" >&2
+exit 1

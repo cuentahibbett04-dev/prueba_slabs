@@ -1,0 +1,13 @@
+{
+  "seed": 42,
+  "energies_mev": [1.0, 2.0, 4.0, 6.0],
+  "n_geometries": 4,
+  "noisy_repeats_per_geometry": 2,
+  "events_low": 2000,
+  "events_high": 10000,
+  "simulator_command_template": "./mc/run_photon_sim.sh --energy {energy_mev} --events {events} --out {output_dir} --seed {seed}",
+  "output_root": "mini_deepmc_photon",
+  "build_dataset": true,
+  "train_ratio": 0.75,
+  "val_ratio": 0.125
+}

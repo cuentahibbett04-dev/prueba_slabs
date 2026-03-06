@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "energies_mev": [90, 110, 130, 150],
+  "replicas_per_energy": 1,
+  "events_low": 2000,
+  "events_high": 100000,
+  "simulator_command_template": "./mc/run_proton_sim.sh --energy {energy_mev} --events {events} --out {output_dir} --seed {seed}",
+  "expects": {
+    "dose_filename": "dose.npy",
+    "spr_filename": "spr.npy",
+    "metadata_filename": "meta.json"
+  },
+  "output_root": "mc_runs_opengate_small"
+}
