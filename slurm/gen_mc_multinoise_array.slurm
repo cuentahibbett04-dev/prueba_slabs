@@ -41,16 +41,29 @@ fi
 # Example:
 # sbatch --export=ALL,OPENGATE_PYTHON=/path/to/opengate_env/bin/python slurm/gen_mc_multinoise_array.slurm
 export OPENGATE_PYTHON=${OPENGATE_PYTHON:-python3}
+SIM_TIMEOUT_SEC=${SIM_TIMEOUT_SEC:-900}
+SIM_KILL_AFTER_SEC=${SIM_KILL_AFTER_SEC:-60}
+DEBUG_TRACE=${DEBUG_TRACE:-0}
+
+if [[ "$DEBUG_TRACE" == "1" ]]; then
+  set -x
+fi
 
 cd "$PROJECT_DIR"
 mkdir -p logs "$MC_ROOT"
 
-idx=$SLURM_ARRAY_TASK_ID
+idx_offset=${IDX_OFFSET:-0}
+idx=$(( SLURM_ARRAY_TASK_ID + idx_offset ))
 energies=(1 2 4 6 8)
 samples_per_energy=${SAMPLES_PER_ENERGY:-500}
 
 if (( samples_per_energy <= 0 )); then
   echo "ERROR: SAMPLES_PER_ENERGY must be > 0, got: $samples_per_energy" >&2
+  exit 1
+fi
+
+if (( idx_offset < 0 )); then
+  echo "ERROR: IDX_OFFSET must be >= 0, got: $idx_offset" >&2
   exit 1
 fi
 
@@ -66,13 +79,44 @@ sample=$(printf "E%03d_r%03d" "$energy" "$rep")
 sample_dir="$MC_ROOT/$sample"
 mkdir -p "$sample_dir"
 
+log() {
+  echo "[$(date '+%F %T')] $*"
+}
+
 run_if_missing() {
   local out_dir="$1"
   local events="$2"
   local seed="$3"
-  if [[ ! -f "$out_dir/dose.npy" ]]; then
+  if [[ -f "$out_dir/dose.npy" ]]; then
+    log "SKIP existing dose: $out_dir/dose.npy"
+    return 0
+  fi
+
+  log "START sample=$sample events=$events out=$out_dir seed=$seed"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --signal=TERM --kill-after="${SIM_KILL_AFTER_SEC}s" "${SIM_TIMEOUT_SEC}s" \
+      bash "$SIM_SCRIPT" --energy "$energy" --events "$events" --out "$out_dir" --seed "$seed"
+  else
+    # Fallback when timeout command is unavailable on cluster.
     bash "$SIM_SCRIPT" --energy "$energy" --events "$events" --out "$out_dir" --seed "$seed"
   fi
+
+  local rc=$?
+  if (( rc == 124 )); then
+    log "TIMEOUT sample=$sample events=$events after ${SIM_TIMEOUT_SEC}s"
+    return 124
+  fi
+  if (( rc != 0 )); then
+    log "ERROR sample=$sample events=$events rc=$rc"
+    return "$rc"
+  fi
+
+  if [[ ! -f "$out_dir/dose.npy" ]]; then
+    log "ERROR sample=$sample events=$events finished but dose.npy missing: $out_dir/dose.npy"
+    return 2
+  fi
+
+  log "DONE sample=$sample events=$events"
 }
 
 # high target once

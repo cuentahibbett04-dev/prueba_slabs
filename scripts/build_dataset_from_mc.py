@@ -60,6 +60,55 @@ def _split_indices(n: int, train_ratio: float, val_ratio: float, seed: int) -> d
     return {"train": train_idx, "val": val_idx, "test": test_idx}
 
 
+def _split_indices_with_angle_holdout(
+    sample_dirs: list[Path],
+    train_ratio: float,
+    val_ratio: float,
+    val_angle_ratio: float,
+    seed: int,
+) -> dict[str, list[int]]:
+    if not (0.0 < val_angle_ratio < 1.0):
+        raise ValueError(f"val_angle_ratio must be in (0,1), got {val_angle_ratio}")
+
+    angle_by_idx: dict[int, float] = {}
+    for i, sample_dir in enumerate(sample_dirs):
+        variant = _load_optional_json(sample_dir / "variant.json")
+        if "incidence_angle_deg" not in variant:
+            raise ValueError(
+                f"Missing incidence_angle_deg in {sample_dir / 'variant.json'}; "
+                "run MC generation with updated mc/run_photon_sim.sh"
+            )
+        angle_by_idx[i] = float(variant["incidence_angle_deg"])
+
+    unique_angles = sorted({round(v, 6) for v in angle_by_idx.values()})
+    if len(unique_angles) < 2:
+        raise ValueError("Need at least 2 unique incidence angles for angle holdout split")
+
+    rng = np.random.default_rng(seed)
+    perm = np.array(unique_angles, dtype=np.float64)
+    rng.shuffle(perm)
+
+    n_val_angles = int(round(len(unique_angles) * val_angle_ratio))
+    n_val_angles = max(1, min(n_val_angles, len(unique_angles) - 1))
+    val_angles = set(float(v) for v in perm[:n_val_angles])
+
+    val_idx = [i for i, a in angle_by_idx.items() if round(a, 6) in {round(v, 6) for v in val_angles}]
+    rest_idx = [i for i in range(len(sample_dirs)) if i not in set(val_idx)]
+
+    test_ratio = max(0.0, 1.0 - train_ratio - val_ratio)
+    denom = train_ratio + test_ratio
+    train_share_in_rest = 1.0 if denom <= 0 else train_ratio / denom
+
+    rest = np.array(rest_idx, dtype=np.int64)
+    rng.shuffle(rest)
+    n_train = int(round(len(rest) * train_share_in_rest))
+    n_train = min(max(n_train, 0), len(rest))
+
+    train_idx = rest[:n_train].tolist()
+    test_idx = rest[n_train:].tolist()
+    return {"train": train_idx, "val": val_idx, "test": test_idx}
+
+
 def main(args: argparse.Namespace) -> None:
     mc_root = Path(args.mc_root)
     out_root = Path(args.out_root)
@@ -69,7 +118,16 @@ def main(args: argparse.Namespace) -> None:
     if not sample_dirs:
         raise RuntimeError(f"No sample folders found in {mc_root}")
 
-    splits = _split_indices(len(sample_dirs), args.train_ratio, args.val_ratio, args.seed)
+    if args.holdout_val_by_angle:
+        splits = _split_indices_with_angle_holdout(
+            sample_dirs,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+            val_angle_ratio=args.val_angle_ratio,
+            seed=args.seed,
+        )
+    else:
+        splits = _split_indices(len(sample_dirs), args.train_ratio, args.val_ratio, args.seed)
 
     phantom = build_multilayer_phantom()
     spr_default = normalize_spr_to_01(phantom.spr_map)
@@ -143,6 +201,17 @@ if __name__ == "__main__":
     parser.add_argument("--spr-filename", type=str, default="spr.npy")
     parser.add_argument("--train-ratio", type=float, default=0.75)
     parser.add_argument("--val-ratio", type=float, default=0.125)
+    parser.add_argument(
+        "--holdout-val-by-angle",
+        action="store_true",
+        help="Build val split from held-out incidence angles read from pair/variant.json",
+    )
+    parser.add_argument(
+        "--val-angle-ratio",
+        type=float,
+        default=0.2,
+        help="Fraction of unique incidence angles assigned to val when --holdout-val-by-angle is used",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--rescale-low-by-history-ratio",

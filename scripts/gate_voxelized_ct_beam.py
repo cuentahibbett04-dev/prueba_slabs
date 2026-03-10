@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 import opengate as gate
+import SimpleITK as sitk
 
 
 def add_point_source(
@@ -15,6 +17,7 @@ def add_point_source(
     x_mm: float,
     y_mm: float,
     z_cm: float,
+    incidence_angle_deg: float,
 ) -> None:
     mm = gate.g4_units.mm
     cm = gate.g4_units.cm
@@ -26,7 +29,8 @@ def add_point_source(
     source.position.type = "point"
     source.position.translation = [float(x_mm) * mm, float(y_mm) * mm, float(z_cm) * cm]
     source.direction.type = "momentum"
-    source.direction.momentum = [0, 0, 1]
+    theta = math.radians(float(incidence_angle_deg))
+    source.direction.momentum = [math.sin(theta), 0.0, math.cos(theta)]
     source.n = int(n_events)
 
 
@@ -40,6 +44,7 @@ def build_sim(
     source_z_cm: float,
     source_x_mm: float,
     source_y_mm: float,
+    incidence_angle_deg: float,
 ) -> gate.Simulation:
     sim = gate.Simulation()
 
@@ -74,13 +79,18 @@ def build_sim(
         x_mm=source_x_mm,
         y_mm=source_y_mm,
         z_cm=source_z_cm,
+        incidence_angle_deg=incidence_angle_deg,
     )
+
+    ct_img = sitk.ReadImage(str(ct_mhd))
+    ct_size = ct_img.GetSize()
+    ct_spacing = ct_img.GetSpacing()
 
     dose = sim.add_actor("DoseActor", "dose")
     dose.attached_to = "patient"
-    # Fixed shape/spacing to match slab phantom created by create_slab_ct_mhd.py
-    dose.size = [75, 75, 100]
-    dose.spacing = [2.0 * mm, 2.0 * mm, 2.0 * mm]
+    # Match dose grid to voxelized CT geometry.
+    dose.size = [int(ct_size[0]), int(ct_size[1]), int(ct_size[2])]
+    dose.spacing = [float(ct_spacing[0]) * mm, float(ct_spacing[1]) * mm, float(ct_spacing[2]) * mm]
     dose.output_filename = "dose_voxelized_ct.mhd"
     dose.write_to_disk = True
 
@@ -98,6 +108,7 @@ def main() -> None:
     parser.add_argument("--source-z-cm", type=float, default=-30.0)
     parser.add_argument("--source-x-mm", type=float, default=0.0)
     parser.add_argument("--source-y-mm", type=float, default=0.0)
+    parser.add_argument("--incidence-angle-deg", type=float, default=0.0)
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +122,7 @@ def main() -> None:
         source_z_cm=args.source_z_cm,
         source_x_mm=args.source_x_mm,
         source_y_mm=args.source_y_mm,
+        incidence_angle_deg=args.incidence_angle_deg,
     )
     sim.run()
 

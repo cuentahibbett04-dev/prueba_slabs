@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from tqdm import tqdm
 from proton_denoise.config import TrainConfig
 from proton_denoise.data import ProtonDoseDataset
 from proton_denoise.losses import PhysicsWeightedMSELoss
-from proton_denoise.model import ResUNet3D
+from proton_denoise.model import ALLOWED_ARCHS, build_model
 
 
 def set_seed(seed: int) -> None:
@@ -26,16 +27,46 @@ def set_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def run_epoch(model, loader, criterion, optimizer, device, train: bool, scaler: GradScaler | None) -> float:
+def ensure_rocm_runtime_dirs() -> None:
+    """Create temp/cache directories required by MIOpen when running outside wrapper scripts."""
+    scratch = os.environ.get("SCRATCH")
+    home = os.environ.get("HOME", str(Path.home()))
+    base = scratch if scratch else home
+
+    tmpdir = os.environ.get("TMPDIR", str(Path(base) / "tmp"))
+    cache_dir = os.environ.get("MIOPEN_CACHE_DIR", str(Path(base) / "miopen_cache"))
+    user_db = os.environ.get("MIOPEN_USER_DB_PATH", cache_dir)
+    custom_cache = os.environ.get("MIOPEN_CUSTOM_CACHE_DIR", cache_dir)
+
+    os.environ["TMPDIR"] = tmpdir
+    os.environ.setdefault("MIOPEN_FIND_MODE", "FAST")
+    os.environ["MIOPEN_CACHE_DIR"] = cache_dir
+    os.environ["MIOPEN_USER_DB_PATH"] = user_db
+    os.environ["MIOPEN_CUSTOM_CACHE_DIR"] = custom_cache
+
+    for p in (tmpdir, cache_dir, user_db, custom_cache):
+        Path(p).mkdir(parents=True, exist_ok=True)
+
+
+def run_epoch(
+    model,
+    loader,
+    criterion,
+    optimizer,
+    device,
+    train: bool,
+    scaler: GradScaler | None,
+    amp_dtype: torch.dtype | None,
+) -> float:
     model.train(train)
     losses = []
-    use_amp = scaler is not None and scaler.is_enabled() and device.type == "cuda"
+    use_amp = amp_dtype is not None and device.type == "cuda"
     for batch in tqdm(loader, leave=False):
         x = batch["input"].to(device, non_blocking=True)
         y = batch["target"].to(device, non_blocking=True)
 
         with torch.set_grad_enabled(train):
-            with autocast(device_type=device.type, enabled=use_amp):
+            with autocast(device_type=device.type, enabled=use_amp, dtype=amp_dtype):
                 yhat = model(x)
                 loss = criterion(yhat, y)
 
@@ -65,6 +96,7 @@ def main(args: argparse.Namespace) -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.device == "cuda" else "cpu")
     if device.type == "cuda":
+        ensure_rocm_runtime_dirs()
         torch.backends.cudnn.benchmark = True
         print(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
     else:
@@ -105,7 +137,9 @@ def main(args: argparse.Namespace) -> None:
         persistent_workers=args.workers > 0,
     )
 
-    model = ResUNet3D(
+    print(f"Architecture: {args.arch}")
+    model = build_model(
+        args.arch,
         in_channels=2,
         out_channels=1,
         base_channels=args.base_channels,
@@ -118,7 +152,10 @@ def main(args: argparse.Namespace) -> None:
         background_lambda=args.background_lambda,
     )
     optimizer = AdamW(model.parameters(), lr=cfg.lr, weight_decay=TrainConfig().weight_decay)
-    scaler = GradScaler(device.type, enabled=(device.type == "cuda" and args.amp))
+    amp_dtype = None
+    if device.type == "cuda" and args.amp:
+        amp_dtype = torch.bfloat16 if args.amp_dtype == "bf16" else torch.float16
+    scaler = GradScaler(device.type, enabled=(device.type == "cuda" and args.amp and args.amp_dtype == "fp16"))
 
     history = []
     start_epoch = int(args.start_epoch)
@@ -153,8 +190,26 @@ def main(args: argparse.Namespace) -> None:
     save_every = int(args.save_every)
 
     for epoch in range(start_epoch + 1, start_epoch + cfg.epochs + 1):
-        tr = run_epoch(model, train_loader, criterion, optimizer, device, train=True, scaler=scaler)
-        va = run_epoch(model, val_loader, criterion, optimizer, device, train=False, scaler=scaler)
+        tr = run_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            train=True,
+            scaler=scaler,
+            amp_dtype=amp_dtype,
+        )
+        va = run_epoch(
+            model,
+            val_loader,
+            criterion,
+            optimizer,
+            device,
+            train=False,
+            scaler=scaler,
+            amp_dtype=amp_dtype,
+        )
 
         row = {"epoch": epoch, "train_loss": tr, "val_loss": va}
         history.append(row)
@@ -165,6 +220,7 @@ def main(args: argparse.Namespace) -> None:
                 "model_state_dict": model.state_dict(),
                 "epoch": epoch,
                 "val_loss": va,
+                "arch": args.arch,
                 "base_channels": args.base_channels,
                 "output_activation": args.output_activation,
             }
@@ -178,6 +234,7 @@ def main(args: argparse.Namespace) -> None:
                 "model_state_dict": model.state_dict(),
                 "epoch": epoch,
                 "val_loss": va,
+                "arch": args.arch,
                 "base_channels": args.base_channels,
                 "output_activation": args.output_activation,
             }
@@ -204,7 +261,15 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--device", type=str, choices=["cuda", "cpu"], default="cuda")
+    parser.add_argument("--arch", type=str, choices=list(ALLOWED_ARCHS), default="resunet3d")
     parser.add_argument("--amp", action="store_true", help="Enable mixed precision on CUDA")
+    parser.add_argument(
+        "--amp-dtype",
+        type=str,
+        choices=["fp16", "bf16"],
+        default="fp16",
+        help="AMP compute dtype on CUDA; bf16 is often better on AMD MI210",
+    )
     parser.add_argument("--loss-alpha", type=float, default=3.0)
     parser.add_argument("--loss-min-weight", type=float, default=None)
     parser.add_argument(

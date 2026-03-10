@@ -11,21 +11,13 @@ import numpy as np
 import torch
 
 from proton_denoise.data import ProtonDoseDataset
-from proton_denoise.model import ResUNet3D
+from proton_denoise.model import load_model_from_checkpoint
 
 
 def load_prediction(ckpt_path: Path, x: torch.Tensor, device: torch.device) -> tuple[np.ndarray, int]:
     ckpt = torch.load(ckpt_path, map_location="cpu")
-    base_channels = int(ckpt.get("base_channels", 16))
     epoch = int(ckpt.get("epoch", -1))
-    output_activation = str(ckpt.get("output_activation", "identity"))
-    model = ResUNet3D(
-        in_channels=2,
-        out_channels=1,
-        base_channels=base_channels,
-        output_activation=output_activation,
-    ).to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    model = load_model_from_checkpoint(ckpt, in_channels=2, out_channels=1).to(device)
     model.eval()
     with torch.no_grad():
         yhat = model(x.to(device)).cpu().numpy()[0, 0]

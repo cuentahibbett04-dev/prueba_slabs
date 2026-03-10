@@ -12,7 +12,7 @@ import torch
 
 from proton_denoise.data import ProtonDoseDataset
 from proton_denoise.metrics import bragg_peak_index, central_axis_profile
-from proton_denoise.model import ResUNet3D
+from proton_denoise.model import load_model_from_checkpoint
 
 
 def core_mean_depth_profile(dose: np.ndarray, half_width: int = 2) -> np.ndarray:
@@ -31,7 +31,7 @@ def longitudinal_xz_slice(dose: np.ndarray) -> np.ndarray:
 
 
 def evaluate_one(
-    model: ResUNet3D,
+    model: torch.nn.Module,
     ds: ProtonDoseDataset,
     idx: int,
     out_dir: Path,
@@ -134,15 +134,7 @@ def main() -> None:
     )
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")
-    base_channels = int(ckpt.get("base_channels", 16))
-    output_activation = str(ckpt.get("output_activation", "identity"))
-    model = ResUNet3D(
-        in_channels=2,
-        out_channels=1,
-        base_channels=base_channels,
-        output_activation=output_activation,
-    ).to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    model = load_model_from_checkpoint(ckpt, in_channels=2, out_channels=1).to(device)
     model.eval()
 
     out_dir = Path(args.out_dir)
