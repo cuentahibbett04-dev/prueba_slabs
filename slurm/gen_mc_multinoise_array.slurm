@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mc_multi_1000
+#SBATCH --job-name=mc_multi_2500
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --partition=cpu
@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
 #SBATCH --time=02:00:00
-#SBATCH --array=0-999%200
+#SBATCH --array=0-2499%200
 
 set -euo pipefail
 
@@ -47,9 +47,19 @@ mkdir -p logs "$MC_ROOT"
 
 idx=$SLURM_ARRAY_TASK_ID
 energies=(1 2 4 6 8)
+samples_per_energy=${SAMPLES_PER_ENERGY:-500}
 
-energy_idx=$(( idx / 200 ))
-rep=$(( idx % 200 ))
+if (( samples_per_energy <= 0 )); then
+  echo "ERROR: SAMPLES_PER_ENERGY must be > 0, got: $samples_per_energy" >&2
+  exit 1
+fi
+
+energy_idx=$(( idx / samples_per_energy ))
+rep=$(( idx % samples_per_energy ))
+if (( energy_idx < 0 || energy_idx >= ${#energies[@]} )); then
+  echo "ERROR: idx=$idx maps to invalid energy index=$energy_idx (len=${#energies[@]}, samples_per_energy=$samples_per_energy)" >&2
+  exit 1
+fi
 energy=${energies[$energy_idx]}
 
 sample=$(printf "E%03d_r%03d" "$energy" "$rep")

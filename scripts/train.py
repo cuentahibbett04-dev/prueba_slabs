@@ -111,7 +111,12 @@ def main(args: argparse.Namespace) -> None:
         base_channels=args.base_channels,
         output_activation=args.output_activation,
     ).to(device)
-    criterion = PhysicsWeightedMSELoss(alpha=args.loss_alpha, min_weight=args.loss_min_weight)
+    criterion = PhysicsWeightedMSELoss(
+        alpha=args.loss_alpha,
+        min_weight=args.loss_min_weight,
+        background_threshold=args.background_threshold,
+        background_lambda=args.background_lambda,
+    )
     optimizer = AdamW(model.parameters(), lr=cfg.lr, weight_decay=TrainConfig().weight_decay)
     scaler = GradScaler(device.type, enabled=(device.type == "cuda" and args.amp))
 
@@ -202,6 +207,18 @@ if __name__ == "__main__":
     parser.add_argument("--amp", action="store_true", help="Enable mixed precision on CUDA")
     parser.add_argument("--loss-alpha", type=float, default=3.0)
     parser.add_argument("--loss-min-weight", type=float, default=None)
+    parser.add_argument(
+        "--background-threshold",
+        type=float,
+        default=None,
+        help="Optional threshold on normalized target to define low-dose voxels for background penalty",
+    )
+    parser.add_argument(
+        "--background-lambda",
+        type=float,
+        default=0.0,
+        help="Weight of background residual penalty term (0 disables)",
+    )
     parser.add_argument(
         "--input-norm-mode",
         type=str,

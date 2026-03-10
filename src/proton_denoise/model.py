@@ -40,7 +40,7 @@ class DownBlock(nn.Module):
 class UpBlock(nn.Module):
     def __init__(self, in_ch: int, skip_ch: int, out_ch: int):
         super().__init__()
-        self.up = nn.ConvTranspose3d(in_ch, out_ch, kernel_size=2, stride=2)
+        self.proj = nn.Conv3d(in_ch, out_ch, kernel_size=1)
         self.conv = nn.Sequential(
             nn.Conv3d(out_ch + skip_ch, out_ch, kernel_size=3, padding=1, bias=False),
             nn.InstanceNorm3d(out_ch),
@@ -49,7 +49,8 @@ class UpBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
-        x = self.up(x)
+        x = F.interpolate(x, scale_factor=2.0, mode="trilinear", align_corners=False)
+        x = self.proj(x)
         if x.shape[-3:] != skip.shape[-3:]:
             # Safe crop if odd dimensions appear.
             dz = skip.shape[-3] - x.shape[-3]

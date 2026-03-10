@@ -7,11 +7,20 @@ import torch.nn as nn
 class PhysicsWeightedMSELoss(nn.Module):
     """DeepMC-style exponentially weighted MSE using target and prediction."""
 
-    def __init__(self, alpha: float = 3.0, min_weight: float | None = None, eps: float = 1e-8):
+    def __init__(
+        self,
+        alpha: float = 3.0,
+        min_weight: float | None = None,
+        eps: float = 1e-8,
+        background_threshold: float | None = None,
+        background_lambda: float = 0.0,
+    ):
         super().__init__()
         self.alpha = alpha
         self.min_weight = min_weight
         self.eps = eps
+        self.background_threshold = background_threshold
+        self.background_lambda = background_lambda
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         # Eq-style weighting: exp(-alpha * (1 - 0.5*(Y + Yhat)/max(Y))).
@@ -23,4 +32,13 @@ class PhysicsWeightedMSELoss(nn.Module):
         weights = torch.exp(-self.alpha * (1.0 - y_avg_norm))
         if self.min_weight is not None:
             weights = torch.clamp(weights, min=self.min_weight, max=1.0)
-        return torch.mean(weights * (pred - target) ** 2)
+        base = torch.mean(weights * (pred - target) ** 2)
+
+        if self.background_threshold is None or self.background_lambda <= 0.0:
+            return base
+
+        # Penalize residual dose in low-target voxels to suppress background haze.
+        bg_mask = (target <= float(self.background_threshold)).to(pred.dtype)
+        bg_denom = torch.clamp(torch.sum(bg_mask), min=1.0)
+        bg_penalty = torch.sum(bg_mask * (pred**2)) / bg_denom
+        return base + float(self.background_lambda) * bg_penalty

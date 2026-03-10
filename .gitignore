@@ -31,3 +31,6 @@ mc/generated/
 
 # Optional logs
 *.log
+
+# Local cluster manifest (machine-specific)
+slurm/manifest.env

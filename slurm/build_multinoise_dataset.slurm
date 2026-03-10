@@ -38,6 +38,9 @@ python scripts/extend_mc_multinoise_from_existing.py \
   --mc-root "$DATA_DIR/mc_runs_opengate_photon_1000" \
   --pairs-root "$DATA_DIR/mc_runs_opengate_photon_1000_multinoise_pairs" \
   --dataset-out "$DATA_DIR/data_real_photon_1000_multinoise" \
+  --max-samples 2500 \
+  --train-ratio 0.8 \
+  --val-ratio 0.1 \
   --max-parallel 8 \
   --clean-pairs
 

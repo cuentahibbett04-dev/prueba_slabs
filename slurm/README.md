@@ -23,7 +23,7 @@ DATA_DIR=${SCRATCH:-$HOME}/prueba_slabs_data
 TMPDIR=${TMPDIR:-/tmp}
 ```
 
-## 1) Generate MC data with array job (1000 samples, 200 concurrent)
+## 1) Generate MC data with array job (2,500 base samples, 200 concurrent)
 
 ```bash
 cd ~/prueba_slabs
@@ -35,12 +35,18 @@ Progress checks:
 
 ```bash
 MC_ROOT=$SCRATCH/prueba_slabs_data/mc_runs_opengate_photon_1000
-echo "high: $(find "$MC_ROOT" -path '*/high/dose.npy' | wc -l)/1000"
-echo "2k  : $(find "$MC_ROOT" -path '*/low/dose.npy' | wc -l)/1000"
-echo "5k  : $(find "$MC_ROOT" -path '*/low_e05000/dose.npy' | wc -l)/1000"
-echo "10k : $(find "$MC_ROOT" -path '*/low_e10000/dose.npy' | wc -l)/1000"
-echo "20k : $(find "$MC_ROOT" -path '*/low_e20000/dose.npy' | wc -l)/1000"
+TARGET=2500
+echo "high: $(find "$MC_ROOT" -path '*/high/dose.npy' | wc -l)/$TARGET"
+echo "2k  : $(find "$MC_ROOT" -path '*/low/dose.npy' | wc -l)/$TARGET"
+echo "5k  : $(find "$MC_ROOT" -path '*/low_e05000/dose.npy' | wc -l)/$TARGET"
+echo "10k : $(find "$MC_ROOT" -path '*/low_e10000/dose.npy' | wc -l)/$TARGET"
+echo "20k : $(find "$MC_ROOT" -path '*/low_e20000/dose.npy' | wc -l)/$TARGET"
 ```
+
+Notes:
+- Default `slurm/gen_mc_multinoise_array.slurm` settings now produce 2,500 base samples.
+- High-stat references remain `100,000` events per sample.
+- `slurm/build_multinoise_dataset.slurm` builds 10,000 pairs (2,500 x 4) and uses split 80/10/10.
 
 ## 2) Build multinoise pairs + dataset
 
