@@ -34,6 +34,11 @@ fi
 
 PROJECT_DIR=${PROJECT_DIR:-$SUBMIT_DIR}
 DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
+EVENTS_HIGH=${EVENTS_HIGH:-1000000}
+DATA_ROOT=${DATA_ROOT:-$DATA_DIR/data_real_photon_${EVENTS_HIGH}_multinoise}
+ARTIFACTS_DIR=${ARTIFACTS_DIR:-$DATA_DIR/artifacts_real_photon_${EVENTS_HIGH}_multinoise_e20_mi210}
+BATCH_SIZE=${BATCH_SIZE:-16}
+EPOCHS=${EPOCHS:-20}
 export TMPDIR=${TMPDIR:-/tmp}
 mkdir -p "$TMPDIR" 2>/dev/null || true
 
@@ -51,17 +56,22 @@ if torch.cuda.is_available():
 PY
 
 python scripts/train.py \
-  --data-root "$DATA_DIR/data_real_photon_1000_multinoise" \
-  --out-dir "$DATA_DIR/artifacts_real_photon_1000_multinoise_e20_mi210" \
-  --epochs 20 \
-  --batch-size 2 \
+  --data-root "$DATA_ROOT" \
+  --out-dir "$ARTIFACTS_DIR" \
+  --epochs "$EPOCHS" \
+  --batch-size "$BATCH_SIZE" \
   --device cuda \
   --workers 8 \
   --amp \
+  --amp-dtype bf16 \
   --loss-alpha 3.0 \
+  --loss-min-weight 0.05 \
+  --background-threshold 0.02 \
+  --background-lambda 0.2 \
   --patience 5 \
   --min-delta 0.0 \
   --save-every 5 \
+  --save-epochs 1 \
   --input-norm-mode per_channel_max \
   --input-dose-scale 1.0 \
-  --output-activation softplus
+  --output-activation relu

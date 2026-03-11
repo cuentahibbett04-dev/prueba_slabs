@@ -138,56 +138,67 @@ def main(args: argparse.Namespace) -> None:
             split_lookup[i] = split_name
             (out_root / split_name).mkdir(parents=True, exist_ok=True)
 
+    saved = 0
+    skipped = 0
     for i, sample_dir in enumerate(sample_dirs):
         split = split_lookup[i]
+        try:
+            low_path = sample_dir / "low" / args.dose_filename
+            high_path = sample_dir / "high" / args.dose_filename
 
-        low_path = sample_dir / "low" / args.dose_filename
-        high_path = sample_dir / "high" / args.dose_filename
+            low = _load_array(low_path)
+            high = _load_array(high_path)
 
-        low = _load_array(low_path)
-        high = _load_array(high_path)
+            if low.shape != high.shape:
+                raise ValueError(f"Shape mismatch in {sample_dir}: low={low.shape} high={high.shape}")
 
-        if low.shape != high.shape:
-            raise ValueError(f"Shape mismatch in {sample_dir}: low={low.shape} high={high.shape}")
+            spr_path = sample_dir / "high" / args.spr_filename
+            if spr_path.exists():
+                spr = _load_array(spr_path)
+                spr01 = normalize_spr_to_01(spr)
+            else:
+                # Fallback to canonical slab SPR if simulation did not export SPR map.
+                if spr_default.shape != high.shape:
+                    raise ValueError(
+                        f"Missing SPR and default slab shape mismatch for {sample_dir}: "
+                        f"default={spr_default.shape} dose={high.shape}"
+                    )
+                spr01 = spr_default
 
-        spr_path = sample_dir / "high" / args.spr_filename
-        if spr_path.exists():
-            spr = _load_array(spr_path)
-            spr01 = normalize_spr_to_01(spr)
-        else:
-            # Fallback to canonical slab SPR if simulation did not export SPR map.
-            if spr_default.shape != high.shape:
-                raise ValueError(
-                    f"Missing SPR and default slab shape mismatch for {sample_dir}: "
-                    f"default={spr_default.shape} dose={high.shape}"
-                )
-            spr01 = spr_default
+            meta = _load_optional_json(sample_dir / "meta.json")
+            energy = float(meta.get("energy_mev", -1.0))
+            events_low = int(meta.get("events_low", args.default_events_low))
+            events_high = int(meta.get("events_high", args.default_events_high))
+            if energy < 0:
+                print(f"Warning: missing energy in {sample_dir}/meta.json, setting -1")
 
-        meta = _load_optional_json(sample_dir / "meta.json")
-        energy = float(meta.get("energy_mev", -1.0))
-        events_low = int(meta.get("events_low", args.default_events_low))
-        events_high = int(meta.get("events_high", args.default_events_high))
-        if energy < 0:
-            print(f"Warning: missing energy in {sample_dir}/meta.json, setting -1")
+            target_max = float(np.max(high))
+            if target_max <= 0:
+                raise ValueError(f"Target max dose is zero in {sample_dir}")
 
-        target_max = float(np.max(high))
-        if target_max <= 0:
-            raise ValueError(f"Target max dose is zero in {sample_dir}")
+            target = high / target_max
+            noisy = low / target_max
+            if args.rescale_low_by_history_ratio:
+                # Make low-dose input comparable across different history levels.
+                # E[dose] scales linearly with particle histories in MC.
+                if events_low <= 0 or events_high <= 0:
+                    raise ValueError(f"Invalid event counts for {sample_dir}: low={events_low}, high={events_high}")
+                noisy = noisy * (float(events_high) / float(events_low))
 
-        target = high / target_max
-        noisy = low / target_max
-        if args.rescale_low_by_history_ratio:
-            # Make low-dose input comparable across different history levels.
-            # E[dose] scales linearly with particle histories in MC.
-            if events_low <= 0 or events_high <= 0:
-                raise ValueError(f"Invalid event counts for {sample_dir}: low={events_low}, high={events_high}")
-            noisy = noisy * (float(events_high) / float(events_low))
-
-        out_name = f"sample_{i:04d}.npz"
-        out_path = out_root / split / out_name
-        _save_npz(out_path, noisy, target, spr01, energy, events_low=events_low, events_high=events_high)
+            out_name = f"sample_{i:04d}.npz"
+            out_path = out_root / split / out_name
+            _save_npz(out_path, noisy, target, spr01, energy, events_low=events_low, events_high=events_high)
+            saved += 1
+        except Exception as exc:  # pylint: disable=broad-except
+            if args.skip_invalid:
+                skipped += 1
+                print(f"Warning: skipping sample {sample_dir} due to: {exc}")
+                continue
+            raise
 
     print("Dataset build complete")
+    print(f"Saved samples: {saved}")
+    print(f"Skipped samples: {skipped}")
     for split in ["train", "val", "test"]:
         n = len(list((out_root / split).glob("*.npz")))
         print(f"{split}: {n}")
@@ -220,4 +231,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--default-events-low", type=int, default=2000)
     parser.add_argument("--default-events-high", type=int, default=100000)
+    parser.add_argument(
+        "--skip-invalid",
+        action="store_true",
+        help="Skip invalid/corrupt samples instead of stopping the full dataset build",
+    )
     main(parser.parse_args())

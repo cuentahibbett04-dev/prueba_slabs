@@ -26,6 +26,11 @@ fi
 
 PROJECT_DIR=${PROJECT_DIR:-$SUBMIT_DIR}
 DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
+EVENTS_HIGH=${EVENTS_HIGH:-1000000}
+MAX_SAMPLES=${MAX_SAMPLES:-1001}
+MC_ROOT=${MC_ROOT:-$DATA_DIR/mc_runs_opengate_photon_${EVENTS_HIGH}}
+PAIRS_ROOT=${PAIRS_ROOT:-$DATA_DIR/mc_runs_opengate_photon_${EVENTS_HIGH}_multinoise_pairs}
+DATASET_OUT=${DATASET_OUT:-$DATA_DIR/data_real_photon_${EVENTS_HIGH}_multinoise}
 export TMPDIR=${TMPDIR:-/tmp}
 mkdir -p "$TMPDIR" 2>/dev/null || true
 
@@ -35,10 +40,11 @@ export PYTHONPATH=$PROJECT_DIR/src
 mkdir -p logs
 
 python scripts/extend_mc_multinoise_from_existing.py \
-  --mc-root "$DATA_DIR/mc_runs_opengate_photon_1000" \
-  --pairs-root "$DATA_DIR/mc_runs_opengate_photon_1000_multinoise_pairs" \
-  --dataset-out "$DATA_DIR/data_real_photon_1000_multinoise" \
-  --max-samples 2500 \
+  --mc-root "$MC_ROOT" \
+  --pairs-root "$PAIRS_ROOT" \
+  --dataset-out "$DATASET_OUT" \
+  --events-high "$EVENTS_HIGH" \
+  --max-samples "$MAX_SAMPLES" \
   --train-ratio 0.8 \
   --val-ratio 0.1 \
   --max-parallel 8 \

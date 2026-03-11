@@ -196,6 +196,7 @@ def main(args: argparse.Namespace) -> None:
             f"--out-root {shlex.quote(str(dataset_out))} "
             f"--train-ratio {args.train_ratio} --val-ratio {args.val_ratio} --seed {args.seed} "
             f"--rescale-low-by-history-ratio "
+            f"--skip-invalid "
             f"--default-events-low 2000 --default-events-high {args.events_high}"
         )
         print(f"[CMD] {cmd}")

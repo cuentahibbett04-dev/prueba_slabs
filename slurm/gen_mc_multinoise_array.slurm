@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mc_multi_2500
+#SBATCH --job-name=mc_multi
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --partition=cpu
@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --array=0-2499%200
 
 set -euo pipefail
@@ -27,7 +27,8 @@ fi
 
 PROJECT_DIR=${PROJECT_DIR:-$SUBMIT_DIR}
 DATA_DIR=${DATA_DIR:-${SCRATCH:-$HOME}/prueba_slabs_data}
-MC_ROOT=${MC_ROOT:-$DATA_DIR/mc_runs_opengate_photon_1000}
+EVENTS_HIGH=${EVENTS_HIGH:-1000000}
+MC_ROOT=${MC_ROOT:-$DATA_DIR/mc_runs_opengate_photon_${EVENTS_HIGH}}
 export TMPDIR=${TMPDIR:-/tmp}
 mkdir -p "$TMPDIR" 2>/dev/null || true
 SIM_SCRIPT="$PROJECT_DIR/mc/run_photon_sim.sh"
@@ -41,7 +42,7 @@ fi
 # Example:
 # sbatch --export=ALL,OPENGATE_PYTHON=/path/to/opengate_env/bin/python slurm/gen_mc_multinoise_array.slurm
 export OPENGATE_PYTHON=${OPENGATE_PYTHON:-python3}
-SIM_TIMEOUT_SEC=${SIM_TIMEOUT_SEC:-900}
+SIM_TIMEOUT_SEC=${SIM_TIMEOUT_SEC:-1200}
 SIM_KILL_AFTER_SEC=${SIM_KILL_AFTER_SEC:-60}
 DEBUG_TRACE=${DEBUG_TRACE:-0}
 
@@ -120,7 +121,7 @@ run_if_missing() {
 }
 
 # high target once
-run_if_missing "$sample_dir/high" 100000 $((100000 + idx))
+run_if_missing "$sample_dir/high" "$EVENTS_HIGH" $((EVENTS_HIGH + idx))
 
 # low levels
 run_if_missing "$sample_dir/low" 2000 $((2000 + idx))
@@ -132,7 +133,7 @@ cat > "$sample_dir/meta.json" <<EOF
 {
   "energy_mev": $energy,
   "events_low": 2000,
-  "events_high": 100000
+  "events_high": $EVENTS_HIGH
 }
 EOF
 

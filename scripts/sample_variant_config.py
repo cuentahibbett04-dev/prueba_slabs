@@ -7,18 +7,12 @@ import random
 
 
 LAYER_PRESETS = [
-    ("water,bone,lung,water", "40,30,50,80"),
-    ("water,lung,bone,water", "40,50,30,80"),
-    ("bone,water,lung,water", "30,40,50,80"),
-    ("lung,water,bone,water", "50,40,30,80"),
-    ("water,bone,water,lung", "40,30,80,50"),
-    ("water,lung,water,bone", "40,50,80,30"),
-    ("water,air,bone,water", "40,20,40,100"),
-    ("water,lung,air,water", "45,35,20,100"),
-    ("bone,air,water,lung", "30,20,60,90"),
+    ("water,air,water", "60,80,60"),
+    ("water,lung,water", "60,80,60"),
+    ("water,bone,water", "60,80,60"),
 ]
 
-ANGLE_PRESETS_DEG = [-66.0, -45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0, 66.0]
+ANGLE_PRESETS_DEG = [0.0]
 
 
 def stable_seed(sample_id: str, global_seed: int) -> int:
@@ -35,9 +29,9 @@ def main() -> None:
     rng = random.Random(stable_seed(args.sample_id, args.global_seed))
 
     layer_order, layer_thickness = rng.choice(LAYER_PRESETS)
-    source_x_mm = rng.choice([-6.0, -3.0, 0.0, 3.0, 6.0])
-    source_y_mm = rng.choice([-6.0, -3.0, 0.0, 3.0, 6.0])
-    source_z_cm = rng.choice([-28.0, -30.0, -32.0, -35.0])
+    source_x_mm = 0.0
+    source_y_mm = 0.0
+    source_z_cm = -30.0
     incidence_angle_deg = rng.choice(ANGLE_PRESETS_DEG)
 
     # Output format is easy to parse in shell with read -r.
