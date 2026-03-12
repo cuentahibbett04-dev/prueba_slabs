@@ -9,9 +9,16 @@ import SimpleITK as sitk
 
 
 def hu_to_spr(hu: np.ndarray) -> np.ndarray:
-    spr = np.full_like(hu, 1.0, dtype=np.float32)  # water default
-    spr[hu <= -300] = 0.3
-    spr[hu >= 201] = 1.65
+    # Keep HU bins consistent with gate_voxelized_ct_beam.py voxel_materials.
+    # Representative SPR values are approximate class centroids for analysis.
+    spr = np.full_like(hu, 1.0, dtype=np.float32)
+    spr[hu <= -950] = 0.01  # air
+    spr[(hu > -950) & (hu <= -500)] = 0.26  # lung
+    spr[(hu > -500) & (hu <= -50)] = 0.92  # adipose
+    spr[(hu > -50) & (hu <= 20)] = 1.00  # water/fluid
+    spr[(hu > 20) & (hu <= 100)] = 1.05  # muscle
+    spr[(hu > 100) & (hu <= 300)] = 1.16  # cartilage/trabecular-like
+    spr[hu > 300] = 1.65  # cortical bone
     return spr
 
 

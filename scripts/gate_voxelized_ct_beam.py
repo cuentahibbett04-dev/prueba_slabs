@@ -66,9 +66,14 @@ def build_sim(
     patient.material = "G4_AIR"
     patient.voxel_materials = [
         (-2000, -950, "G4_AIR"),
-        (-949, -300, "G4_LUNG_ICRP"),
-        (-299, 200, "G4_WATER"),
-        (201, 2000, "G4_BONE_COMPACT_ICRU"),
+        (-949, -500, "G4_LUNG_ICRP"),
+        (-499, -50, "G4_ADIPOSE_TISSUE_ICRP"),
+        (-49, 20, "G4_WATER"),
+        (21, 100, "G4_MUSCLE_SKELETAL_ICRP"),
+        # G4_CARTILAGE_ICRP is not available in some Geant4 builds.
+        # Keep the HU bin but map it to a broadly available soft-tissue material.
+        (101, 300, "G4_MUSCLE_SKELETAL_ICRP"),
+        (301, 2000, "G4_BONE_COMPACT_ICRU"),
     ]
 
     add_point_source(

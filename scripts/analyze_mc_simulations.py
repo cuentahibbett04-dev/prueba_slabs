@@ -10,10 +10,17 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
-from proton_denoise.model import load_model_from_checkpoint
-from proton_denoise.physics import normalize_spr_to_01
+
+MATERIAL_BINS: list[tuple[str, float, float]] = [
+    ("air", -np.inf, 0.08),
+    ("lung", 0.08, 0.50),
+    ("fat", 0.50, 0.85),
+    ("soft", 0.85, 1.15),
+    ("trab_bone", 1.15, 1.50),
+    ("cort_bone", 1.50, np.inf),
+]
+MATERIAL_NAMES = [b[0] for b in MATERIAL_BINS]
 
 
 def central_axis_profile(dose: np.ndarray) -> np.ndarray:
@@ -185,21 +192,18 @@ def penumbra_20_80_mm(profile: np.ndarray, spacing_mm: float) -> float:
 
 
 def masks_from_spr(spr: np.ndarray) -> dict[str, np.ndarray]:
-    return {
-        "air": spr <= 0.1,
-        "lung": (spr > 0.1) & (spr <= 0.5),
-        "water": (spr > 0.5) & (spr < 1.3),
-        "bone": spr >= 1.3,
-        "all": np.ones_like(spr, dtype=bool),
-    }
+    out: dict[str, np.ndarray] = {}
+    for name, lo, hi in MATERIAL_BINS:
+        out[name] = (spr > lo) & (spr <= hi)
+    out["all"] = np.ones_like(spr, dtype=bool)
+    return out
 
 
 def material_code_from_spr(spr: np.ndarray) -> np.ndarray:
-    """Map SPR to compact material codes: 0=air, 1=lung, 2=water, 3=bone."""
-    code = np.full(spr.shape, 2, dtype=np.int32)  # default water
-    code[spr >= 1.3] = 3
-    code[(spr > 0.1) & (spr <= 0.5)] = 1
-    code[spr <= 0.1] = 0
+    """Map SPR to compact material codes following MATERIAL_BINS order."""
+    code = np.zeros(spr.shape, dtype=np.int32)
+    for i, (_name, lo, hi) in enumerate(MATERIAL_BINS):
+        code[(spr > lo) & (spr <= hi)] = i
     return code
 
 
@@ -236,9 +240,12 @@ def material_summary_text(spr: np.ndarray) -> str:
     m = masks_from_spr(spr)
     total = float(spr.size)
     parts = []
-    for name in ["air", "lung", "water", "bone"]:
+    for name in MATERIAL_NAMES:
         frac = 100.0 * float(np.count_nonzero(m[name])) / total if total > 0 else 0.0
-        parts.append(f"{name}:{frac:.0f}%")
+        if frac >= 1.0:
+            parts.append(f"{name}:{frac:.0f}%")
+    if not parts:
+        parts = ["mixed:<1% each"]
     return ", ".join(parts)
 
 
@@ -257,14 +264,17 @@ def _apply_input_norm(inp: np.ndarray, mode: str, eps: float = 1e-8) -> np.ndarr
 
 
 def predict_normalized_dose(
-    model: torch.nn.Module,
+    model,
     low_n: np.ndarray,
     spr_raw: np.ndarray,
     *,
-    device: torch.device,
+    device,
     input_norm_mode: str,
     input_dose_scale: float,
 ) -> np.ndarray:
+    import torch
+    from proton_denoise.physics import normalize_spr_to_01
+
     spr01 = normalize_spr_to_01(spr_raw)
     inp = np.stack([low_n.astype(np.float32), spr01.astype(np.float32)], axis=0)
     inp = _apply_input_norm(inp, mode=input_norm_mode)
@@ -447,13 +457,49 @@ def analyze_sample(
     if s_mat_mm.size > 0:
         ax2 = plt.gca().twinx()
         ax2.step(s_mat_mm, beam_mat, where="mid", color="black", alpha=0.35, linewidth=1.2)
-        ax2.set_yticks([0, 1, 2, 3])
-        ax2.set_yticklabels(["air", "lung", "water", "bone"])
+        ax2.set_yticks(list(range(len(MATERIAL_NAMES))))
+        ax2.set_yticklabels(MATERIAL_NAMES)
         ax2.set_ylabel("Material")
-        ax2.set_ylim(-0.5, 3.5)
+        ax2.set_ylim(-0.5, float(len(MATERIAL_NAMES) - 0.5))
     plt.tight_layout()
     plt.savefig(sample_out / "depth_dose_profile.png", dpi=160)
     plt.close()
+
+    # 2D visualization on beam slice (x-z plane at hotspot y).
+    x_axis_mm = np.arange(low.shape[2], dtype=np.float32) * voxel_mm[0]
+    z_axis_mm = np.arange(low.shape[0], dtype=np.float32) * voxel_mm[2]
+    extent = [float(x_axis_mm[0]), float(x_axis_mm[-1]), float(z_axis_mm[0]), float(z_axis_mm[-1])]
+    vmax = float(np.percentile(beam_high_plane, 99.5))
+    if not np.isfinite(vmax) or vmax <= 0:
+        vmax = float(np.max(beam_high_plane)) if beam_high_plane.size > 0 else 1.0
+    vmax = max(vmax, 1e-8)
+
+    fig, axs = plt.subplots(1, 3, figsize=(13, 4), constrained_layout=True)
+    im0 = axs[0].imshow(beam_high_plane, origin="lower", aspect="auto", cmap="inferno", extent=extent, vmin=0.0, vmax=vmax)
+    axs[0].set_title("High (x-z beam slice)")
+    axs[0].set_xlabel("x (mm)")
+    axs[0].set_ylabel("z (mm)")
+
+    axs[1].imshow(beam_low_plane, origin="lower", aspect="auto", cmap="inferno", extent=extent, vmin=0.0, vmax=vmax)
+    axs[1].set_title("Low (x-z beam slice)")
+    axs[1].set_xlabel("x (mm)")
+    axs[1].set_ylabel("z (mm)")
+
+    diff = np.abs(beam_high_plane - beam_low_plane)
+    dvmax = float(np.percentile(diff, 99.5))
+    if not np.isfinite(dvmax) or dvmax <= 0:
+        dvmax = float(np.max(diff)) if diff.size > 0 else 1.0
+    dvmax = max(dvmax, 1e-8)
+    axs[2].imshow(diff, origin="lower", aspect="auto", cmap="magma", extent=extent, vmin=0.0, vmax=dvmax)
+    axs[2].set_title("|High - Low| (x-z)")
+    axs[2].set_xlabel("x (mm)")
+    axs[2].set_ylabel("z (mm)")
+
+    cbar = fig.colorbar(im0, ax=axs[:2], fraction=0.03, pad=0.02)
+    cbar.set_label("Normalized dose")
+    fig.suptitle(f"Beam Slice 2D: {sample_dir.name} (y={cy})")
+    fig.savefig(sample_out / "beam_slice_xz_2d.png", dpi=170)
+    plt.close(fig)
 
     plt.figure(figsize=(7, 4))
     plt.plot(x_mm, lat_high, label=f"High {events_high//1000:g}k")
@@ -468,10 +514,10 @@ def analyze_sample(
     lat_mat = material_code_from_spr(spr[peak_idx_high, cy, :])
     ax2 = plt.gca().twinx()
     ax2.step(x_mm, lat_mat, where="mid", color="black", alpha=0.35, linewidth=1.2)
-    ax2.set_yticks([0, 1, 2, 3])
-    ax2.set_yticklabels(["air", "lung", "water", "bone"])
+    ax2.set_yticks(list(range(len(MATERIAL_NAMES))))
+    ax2.set_yticklabels(MATERIAL_NAMES)
     ax2.set_ylabel("Material")
-    ax2.set_ylim(-0.5, 3.5)
+    ax2.set_ylim(-0.5, float(len(MATERIAL_NAMES) - 0.5))
     plt.tight_layout()
     plt.savefig(sample_out / "lateral_profile.png", dpi=160)
     plt.close()
@@ -480,9 +526,10 @@ def analyze_sample(
     plt.figure(figsize=(7, 5))
     for mat_name, mask in mats.items():
         xh, yh = cumulative_dvh(high_n, mask)
-        xl, yl = cumulative_dvh(low_n_plot, mask)
+        # DVH must use physical normalized doses, not display-scaled low_n_plot.
+        xl, yl = cumulative_dvh(low_n, mask)
         plt.plot(xh, yh, label=f"{mat_name} high", linewidth=2)
-        plt.plot(xl, yl, label=f"{mat_name} low x{low_plot_scale:g}", linestyle="--", alpha=0.8)
+        plt.plot(xl, yl, label=f"{mat_name} low", linestyle="--", alpha=0.8)
         if pred_n is not None:
             xp, yp = cumulative_dvh(pred_n, mask)
             pred_label = f"{mat_name} pred E{pred_epoch}" if pred_epoch >= 0 else f"{mat_name} pred"
@@ -608,6 +655,9 @@ def main() -> None:
     vx, vy, vz = map(float, args.voxel_mm)
     infer_ctx: dict[str, Any] | None = None
     if args.checkpoint is not None:
+        import torch
+        from proton_denoise.model import load_model_from_checkpoint
+
         device = torch.device("cuda" if torch.cuda.is_available() and args.device == "cuda" else "cpu")
         ckpt = torch.load(args.checkpoint, map_location="cpu")
         model = load_model_from_checkpoint(ckpt, in_channels=2, out_channels=1).to(device)
