@@ -110,6 +110,8 @@ def main(args: argparse.Namespace) -> None:
         input_norm_mode=args.input_norm_mode,
         input_dose_scale=args.input_dose_scale,
         low_events_allow=args.low_events_allow,
+        crop_shape=args.crop_shape,
+        crop_focus=args.crop_focus,
     )
     val_ds = ProtonDoseDataset(
         Path(args.data_root) / "val",
@@ -117,6 +119,8 @@ def main(args: argparse.Namespace) -> None:
         input_norm_mode=args.input_norm_mode,
         input_dose_scale=args.input_dose_scale,
         low_events_allow=args.low_events_allow,
+        crop_shape=args.crop_shape,
+        crop_focus=args.crop_focus,
     )
 
     pin = device.type == "cuda"
@@ -308,6 +312,21 @@ if __name__ == "__main__":
         nargs="*",
         default=None,
         help="Optional list of low_events values to include (requires low_events in .npz)",
+    )
+    parser.add_argument(
+        "--crop-shape",
+        type=int,
+        nargs=3,
+        default=None,
+        metavar=("D", "H", "W"),
+        help="Optional fixed [D,H,W] crop applied on-the-fly to input/target/spr",
+    )
+    parser.add_argument(
+        "--crop-focus",
+        type=str,
+        choices=["center", "maxdose"],
+        default="center",
+        help="Crop center strategy when --crop-shape is enabled",
     )
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--min-delta", type=float, default=0.0)

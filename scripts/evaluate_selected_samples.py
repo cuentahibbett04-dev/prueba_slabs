@@ -122,6 +122,8 @@ def main() -> None:
     parser.add_argument("--ref-pred-only", action="store_true")
     parser.add_argument("--input-norm-mode", choices=["none", "per_channel_max", "global_max"], default="none")
     parser.add_argument("--input-dose-scale", type=float, default=1.0)
+    parser.add_argument("--crop-shape", type=int, nargs=3, default=None, metavar=("D", "H", "W"))
+    parser.add_argument("--crop-focus", type=str, choices=["center", "maxdose"], default="center")
     parser.add_argument("--no-normalize-target", action="store_true")
     args = parser.parse_args()
 
@@ -131,6 +133,8 @@ def main() -> None:
         normalize_target=not args.no_normalize_target,
         input_norm_mode=args.input_norm_mode,
         input_dose_scale=args.input_dose_scale,
+        crop_shape=args.crop_shape,
+        crop_focus=args.crop_focus,
     )
 
     ckpt = torch.load(args.checkpoint, map_location="cpu")

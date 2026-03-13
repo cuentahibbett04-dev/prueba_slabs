@@ -21,6 +21,8 @@ class ProtonDoseDataset(Dataset):
         input_dose_scale: float = 1.0,
         eps: float = 1e-8,
         low_events_allow: Iterable[int] | None = None,
+        crop_shape: tuple[int, int, int] | None = None,
+        crop_focus: str = "center",
     ):
         self.split_dir = Path(split_dir)
         all_files = sorted(self.split_dir.glob("*.npz"))
@@ -34,7 +36,16 @@ class ProtonDoseDataset(Dataset):
         self.input_dose_scale = float(input_dose_scale)
         self.eps = float(eps)
         self.low_events_allow = None if low_events_allow is None else {int(v) for v in low_events_allow}
+        self.crop_shape = None if crop_shape is None else tuple(int(v) for v in crop_shape)
+        self.crop_focus = str(crop_focus)
         self._runtime_bad_files: set[Path] = set()
+
+        if self.crop_shape is not None:
+            if len(self.crop_shape) != 3 or any(v <= 0 for v in self.crop_shape):
+                raise ValueError(f"crop_shape must be a 3-tuple of positive ints, got {self.crop_shape!r}")
+        allowed_focus = {"center", "maxdose"}
+        if self.crop_focus not in allowed_focus:
+            raise ValueError(f"crop_focus must be one of {sorted(allowed_focus)}, got {self.crop_focus!r}")
 
         required_keys = {"input", "target", "spr", "energy_mev"}
         valid_files: list[Path] = []
@@ -77,6 +88,36 @@ class ProtonDoseDataset(Dataset):
     def __len__(self) -> int:
         return len(self.files)
 
+    @staticmethod
+    def _crop_or_pad_3d(arr: np.ndarray, crop_shape: tuple[int, int, int], center: tuple[int, int, int]) -> np.ndarray:
+        """Return fixed-size [D,H,W] crop; pads with zeros if needed."""
+        out = arr
+        cz, cy, cx = center
+        tz, ty, tx = crop_shape
+
+        # Pad each axis when source is smaller than target crop.
+        dz, dy, dx = out.shape
+        pad_z = max(0, tz - dz)
+        pad_y = max(0, ty - dy)
+        pad_x = max(0, tx - dx)
+        if pad_z or pad_y or pad_x:
+            pz0 = pad_z // 2
+            pz1 = pad_z - pz0
+            py0 = pad_y // 2
+            py1 = pad_y - py0
+            px0 = pad_x // 2
+            px1 = pad_x - px0
+            out = np.pad(out, ((pz0, pz1), (py0, py1), (px0, px1)), mode="constant", constant_values=0.0)
+            cz += pz0
+            cy += py0
+            cx += px0
+
+        dz, dy, dx = out.shape
+        sz = max(0, min(cz - tz // 2, dz - tz))
+        sy = max(0, min(cy - ty // 2, dy - ty))
+        sx = max(0, min(cx - tx // 2, dx - tx))
+        return out[sz : sz + tz, sy : sy + ty, sx : sx + tx]
+
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         p = self.files[idx]
         load_exc: Exception | None = None
@@ -113,6 +154,20 @@ class ProtonDoseDataset(Dataset):
             high_events_val = int(x["high_events"].item()) if "high_events" in x else -1
             low_events = np.array([low_events_val], dtype=np.float32)
             high_events = np.array([high_events_val], dtype=np.float32)
+
+        if self.crop_shape is not None:
+            if self.crop_focus == "maxdose":
+                center = tuple(int(v) for v in np.unravel_index(np.argmax(target), target.shape))
+            else:
+                d, h, w = target.shape
+                center = (d // 2, h // 2, w // 2)
+
+            target = self._crop_or_pad_3d(target, self.crop_shape, center)
+            spr_3d = self._crop_or_pad_3d(spr[0], self.crop_shape, center)
+            inp0 = self._crop_or_pad_3d(inp[0], self.crop_shape, center)
+            inp1 = self._crop_or_pad_3d(inp[1], self.crop_shape, center)
+            inp = np.stack([inp0, inp1], axis=0)
+            spr = spr_3d[None, ...]
 
         if self.normalize_target:
             tmax = float(np.max(target))
