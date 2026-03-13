@@ -72,6 +72,14 @@ def main() -> None:
     ap.add_argument("--crop-shape", type=int, nargs=3, default=None, metavar=("D", "H", "W"))
     ap.add_argument("--crop-focus", choices=["center", "maxdose"], default="center")
     ap.add_argument("--no-normalize-target", action="store_true")
+    ap.add_argument(
+        "--plot-target-from-npz-raw",
+        action="store_true",
+        help=(
+            "Use raw target from NPZ for plotting. If dataset target normalization is enabled, "
+            "prediction is multiplied by raw target max to compare in the same physical scale."
+        ),
+    )
     ap.add_argument("--low-plot-mode", choices=["unscaled", "model_input"], default="unscaled")
     ap.add_argument(
         "--plot-low-from-npz-raw",
@@ -98,13 +106,28 @@ def main() -> None:
 
     item = ds[args.index]
     x = item["input"].unsqueeze(0).to(device)
-    ref = item["target"][0].cpu().numpy()
+    ref_norm = item["target"][0].cpu().numpy()
     low_model = item["input"][0].cpu().numpy()
 
+    npz_path = Path(item["path"])
+    raw_low = None
+    raw_target = None
+    with np.load(npz_path) as z:
+        raw_low = z["input"][0].astype(np.float32)
+        raw_target = z["target"].astype(np.float32)
+
+    if args.crop_shape is not None:
+        crop_shape = tuple(int(v) for v in args.crop_shape)
+        if args.crop_focus == "maxdose":
+            center = tuple(int(v) for v in np.unravel_index(np.argmax(raw_target), raw_target.shape))
+        else:
+            d, h, w = raw_target.shape
+            center = (d // 2, h // 2, w // 2)
+        raw_low = ProtonDoseDataset._crop_or_pad_3d(raw_low, crop_shape, center)
+        raw_target = ProtonDoseDataset._crop_or_pad_3d(raw_target, crop_shape, center)
+
     if args.plot_low_from_npz_raw:
-        npz_path = Path(item["path"])
-        with np.load(npz_path) as z:
-            low = z["input"][0].astype(np.float32)
+        low = raw_low
     elif args.low_plot_mode == "unscaled" and float(args.input_dose_scale) != 0.0:
         low = low_model / float(args.input_dose_scale)
     else:
@@ -113,7 +136,18 @@ def main() -> None:
     ckpt = torch.load(args.checkpoint, map_location="cpu")
     model = load_model_from_checkpoint(ckpt, in_channels=2, out_channels=1).to(device)
     model.eval()
-    pred = model(x).cpu().numpy()[0, 0]
+    pred_norm = model(x).cpu().numpy()[0, 0]
+
+    if args.plot_target_from_npz_raw:
+        ref = raw_target
+        if args.no_normalize_target:
+            pred = pred_norm
+        else:
+            tmax = float(np.max(raw_target))
+            pred = pred_norm * tmax if tmax > 0.0 else pred_norm
+    else:
+        ref = ref_norm
+        pred = pred_norm
 
     rz, ry, rx, rv, rstats = sample_masked_points(ref, args.rel_threshold, args.max_points, args.seed)
     pz, py, px, pv, pstats = sample_masked_points(pred, args.rel_threshold, args.max_points, args.seed)
@@ -167,6 +201,11 @@ def main() -> None:
         "energy_mev": float(item["energy_mev"].item()),
         "rel_threshold": float(args.rel_threshold),
         "low_plot_mode": str(args.low_plot_mode),
+        "plot_low_from_npz_raw": bool(args.plot_low_from_npz_raw),
+        "plot_target_from_npz_raw": bool(args.plot_target_from_npz_raw),
+        "no_normalize_target": bool(args.no_normalize_target),
+        "input_norm_mode": str(args.input_norm_mode),
+        "input_dose_scale": float(args.input_dose_scale),
         "reference": rstats,
         "prediction": pstats,
         "input_low": lstats,

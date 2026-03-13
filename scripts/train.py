@@ -104,6 +104,21 @@ def main(args: argparse.Namespace) -> None:
 
     cfg.out_dir.mkdir(parents=True, exist_ok=True)
 
+    run_config = {
+        "data_root": args.data_root,
+        "normalize_target": not args.no_normalize_target,
+        "input_norm_mode": args.input_norm_mode,
+        "input_dose_scale": args.input_dose_scale,
+        "low_events_allow": args.low_events_allow,
+        "crop_shape": args.crop_shape,
+        "crop_focus": args.crop_focus,
+        "arch": args.arch,
+        "base_channels": args.base_channels,
+        "output_activation": args.output_activation,
+    }
+    with open(cfg.out_dir / "run_config.json", "w", encoding="utf-8") as f:
+        json.dump(run_config, f, indent=2)
+
     train_ds = ProtonDoseDataset(
         Path(args.data_root) / "train",
         normalize_target=not args.no_normalize_target,
@@ -227,6 +242,13 @@ def main(args: argparse.Namespace) -> None:
                 "arch": args.arch,
                 "base_channels": args.base_channels,
                 "output_activation": args.output_activation,
+                "data_prep": {
+                    "normalize_target": not args.no_normalize_target,
+                    "input_norm_mode": args.input_norm_mode,
+                    "input_dose_scale": args.input_dose_scale,
+                    "crop_shape": args.crop_shape,
+                    "crop_focus": args.crop_focus,
+                },
             }
             torch.save(ckpt_epoch, cfg.out_dir / f"checkpoint_epoch_{epoch:03d}.pt")
 
@@ -241,6 +263,13 @@ def main(args: argparse.Namespace) -> None:
                 "arch": args.arch,
                 "base_channels": args.base_channels,
                 "output_activation": args.output_activation,
+                "data_prep": {
+                    "normalize_target": not args.no_normalize_target,
+                    "input_norm_mode": args.input_norm_mode,
+                    "input_dose_scale": args.input_dose_scale,
+                    "crop_shape": args.crop_shape,
+                    "crop_focus": args.crop_focus,
+                },
             }
             torch.save(ckpt, cfg.out_dir / "best_model.pt")
         else:
