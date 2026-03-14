@@ -616,7 +616,7 @@ def main() -> None:
     parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
     parser.add_argument(
         "--input-norm-mode",
-        choices=["none", "per_channel_max", "global_max"],
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
         default="per_channel_max",
         help="Must match training preprocessing for the checkpoint (most runs use per_channel_max)",
     )

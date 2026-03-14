@@ -120,7 +120,11 @@ def main() -> None:
     parser.add_argument("--device", type=str, choices=["cuda", "cpu"], default="cuda")
     parser.add_argument("--low-plot-scale", type=float, default=50.0)
     parser.add_argument("--ref-pred-only", action="store_true")
-    parser.add_argument("--input-norm-mode", choices=["none", "per_channel_max", "global_max"], default="none")
+    parser.add_argument(
+        "--input-norm-mode",
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
+        default="none",
+    )
     parser.add_argument("--input-dose-scale", type=float, default=1.0)
     parser.add_argument("--crop-shape", type=int, nargs=3, default=None, metavar=("D", "H", "W"))
     parser.add_argument("--crop-focus", type=str, choices=["center", "maxdose"], default="center")

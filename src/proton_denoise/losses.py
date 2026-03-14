@@ -5,7 +5,14 @@ import torch.nn as nn
 
 
 class PhysicsWeightedMSELoss(nn.Module):
-    """DeepMC-style exponentially weighted MSE using target and prediction."""
+    """Exponentially weighted MSE emphasizing high-dose regions.
+
+    Weights are derived from the target only and the weighted error is
+    normalized by the sum of weights, not by the raw voxel count. This avoids
+    two failure modes:
+    1) letting the model change its own weights through the prediction term;
+    2) letting vast low-weight background regions dominate by sheer voxel count.
+    """
 
     def __init__(
         self,
@@ -23,16 +30,18 @@ class PhysicsWeightedMSELoss(nn.Module):
         self.background_lambda = background_lambda
 
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # Eq-style weighting: exp(-alpha * (1 - 0.5*(Y + Yhat)/max(Y))).
+        # Weight by normalized target dose only.
         y_max = torch.amax(target, dim=(-3, -2, -1), keepdim=True)
         y_max = torch.clamp(y_max, min=self.eps)
-        y_avg_norm = 0.5 * (target + pred) / y_max
-        y_avg_norm = torch.clamp(y_avg_norm, min=0.0, max=1.0)
+        y_norm = torch.clamp(target / y_max, min=0.0, max=1.0)
 
-        weights = torch.exp(-self.alpha * (1.0 - y_avg_norm))
+        weights = torch.exp(-self.alpha * (1.0 - y_norm))
         if self.min_weight is not None:
             weights = torch.clamp(weights, min=self.min_weight, max=1.0)
-        base = torch.mean(weights * (pred - target) ** 2)
+        sq_err = (pred - target) ** 2
+        weighted_num = torch.sum(weights * sq_err)
+        weighted_den = torch.clamp(torch.sum(weights), min=self.eps)
+        base = weighted_num / weighted_den
 
         if self.background_threshold is None or self.background_lambda <= 0.0:
             return base

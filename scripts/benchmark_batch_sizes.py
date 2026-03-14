@@ -140,7 +140,12 @@ def main() -> None:
     ap.add_argument("--loss-min-weight", type=float, default=0.05)
     ap.add_argument("--background-threshold", type=float, default=0.02)
     ap.add_argument("--background-lambda", type=float, default=0.2)
-    ap.add_argument("--input-norm-mode", type=str, choices=["none", "per_channel_max", "global_max"], default="per_channel_max")
+    ap.add_argument(
+        "--input-norm-mode",
+        type=str,
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
+        default="per_channel_max",
+    )
     ap.add_argument("--input-dose-scale", type=float, default=1.0)
     ap.add_argument("--no-normalize-target", action="store_true")
     ap.add_argument("--low-events-allow", type=int, nargs="*", default=None)

@@ -51,7 +51,11 @@ def main() -> None:
     ap.add_argument("--band-half-width", type=int, default=2, help="Half-width (in y voxels) for x-z band averaging")
     ap.add_argument("--input-plot-scale", type=float, default=50.0, help="Scale factor for low-input in plots")
     ap.add_argument("--plot-clamp-min", type=float, default=0.0, help="Minimum value used for plotting")
-    ap.add_argument("--input-norm-mode", choices=["none", "per_channel_max", "global_max"], default="none")
+    ap.add_argument(
+        "--input-norm-mode",
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
+        default="none",
+    )
     ap.add_argument("--input-dose-scale", type=float, default=1.0)
     ap.add_argument("--no-normalize-target", action="store_true")
     args = ap.parse_args()

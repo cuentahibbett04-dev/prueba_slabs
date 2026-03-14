@@ -67,7 +67,11 @@ def main() -> None:
     ap.add_argument("--index", type=int, required=True)
     ap.add_argument("--out", type=Path, default=Path("artifacts/pred_ref_low_3d.png"))
     ap.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
-    ap.add_argument("--input-norm-mode", choices=["none", "per_channel_max", "global_max"], default="none")
+    ap.add_argument(
+        "--input-norm-mode",
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
+        default="none",
+    )
     ap.add_argument("--input-dose-scale", type=float, default=1.0)
     ap.add_argument("--crop-shape", type=int, nargs=3, default=None, metavar=("D", "H", "W"))
     ap.add_argument("--crop-focus", choices=["center", "maxdose"], default="center")

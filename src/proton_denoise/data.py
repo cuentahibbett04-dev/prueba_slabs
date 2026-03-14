@@ -28,7 +28,7 @@ class ProtonDoseDataset(Dataset):
         all_files = sorted(self.split_dir.glob("*.npz"))
         if not all_files:
             raise FileNotFoundError(f"No .npz files found in {self.split_dir}")
-        allowed = {"none", "per_channel_max", "global_max"}
+        allowed = {"none", "per_channel_max", "global_max", "coupled_target_max"}
         if input_norm_mode not in allowed:
             raise ValueError(f"input_norm_mode must be one of {sorted(allowed)}, got {input_norm_mode!r}")
         self.normalize_target = bool(normalize_target)
@@ -169,10 +169,28 @@ class ProtonDoseDataset(Dataset):
             inp = np.stack([inp0, inp1], axis=0)
             spr = spr_3d[None, ...]
 
-        if self.normalize_target:
+        if self.input_norm_mode == "coupled_target_max":
+            # Keep low-dose and target in the same normalized physical space.
+            if high_events_val > 0 and low_events_val > 0:
+                ratio = float(high_events_val) / float(low_events_val)
+            else:
+                ratio = self.input_dose_scale
+
+            inp[0] = inp[0] * ratio
+
             tmax = float(np.max(target))
             if tmax > self.eps:
                 target = target / tmax
+                inp[0] = inp[0] / tmax
+
+            cmax_ct = float(np.max(inp[1]))
+            if cmax_ct > self.eps:
+                inp[1] = inp[1] / cmax_ct
+        else:
+            if self.normalize_target:
+                tmax = float(np.max(target))
+                if tmax > self.eps:
+                    target = target / tmax
 
         if self.input_norm_mode == "per_channel_max":
             for c in range(inp.shape[0]):
@@ -185,7 +203,8 @@ class ProtonDoseDataset(Dataset):
                 inp = inp / gmax
 
         # Channel 0 is low-MC dose; this optional scaling can inject known history ratio (e.g., x50).
-        inp[0] = inp[0] * self.input_dose_scale
+        if self.input_norm_mode != "coupled_target_max":
+            inp[0] = inp[0] * self.input_dose_scale
         target = target[None, ...]  # [1, D, H, W]
 
         return {

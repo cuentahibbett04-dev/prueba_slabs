@@ -320,7 +320,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input-norm-mode",
         type=str,
-        choices=["none", "per_channel_max", "global_max"],
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
         default="none",
         help="Input normalization strategy applied by ProtonDoseDataset",
     )

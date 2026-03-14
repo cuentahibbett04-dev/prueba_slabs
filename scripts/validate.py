@@ -132,7 +132,11 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=10.0, help="Dose threshold (%)")
     parser.add_argument("--plot-samples", type=int, default=3)
     parser.add_argument("--device", type=str, choices=["cuda", "cpu"], default="cuda")
-    parser.add_argument("--input-norm-mode", choices=["none", "per_channel_max", "global_max"], default="none")
+    parser.add_argument(
+        "--input-norm-mode",
+        choices=["none", "per_channel_max", "global_max", "coupled_target_max"],
+        default="none",
+    )
     parser.add_argument("--input-dose-scale", type=float, default=1.0)
     parser.add_argument("--no-normalize-target", action="store_true")
     main(parser.parse_args())
