@@ -48,8 +48,10 @@ OUTPUT_ACTIVATION=${OUTPUT_ACTIVATION:-identity}
 CROP_D=${CROP_D:-64}
 CROP_H=${CROP_H:-128}
 CROP_W=${CROP_W:-128}
+CROP_FOCUS=${CROP_FOCUS:-maxdose}
 PATIENCE=${PATIENCE:-8}
 MIN_DELTA=${MIN_DELTA:-1e-7}
+MULTI_GPU=${MULTI_GPU:-0}
 
 unset TMPDIR TMP TEMP MIOPEN_CACHE_DIR MIOPEN_USER_DB_PATH MIOPEN_CUSTOM_CACHE_DIR
 export TMPDIR=${TMPDIR:-/lustre/home/acastaneda/tmp/${SLURM_JOB_ID:-manual}}
@@ -65,7 +67,7 @@ if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
   exit 1
 fi
 source "$VENV_DIR/bin/activate"
-export PYTHONPATH=$PROJECT_DIR/src:$PYTHONPATH
+export PYTHONPATH="$PROJECT_DIR/src:${PYTHONPATH:-}"
 
 echo "PROJECT_DIR=$PROJECT_DIR"
 echo "VENV_DIR=$VENV_DIR"
@@ -87,6 +89,11 @@ for k in ['TMPDIR','MIOPEN_CACHE_DIR','MIOPEN_USER_DB_PATH','MIOPEN_CUSTOM_CACHE
     print(k, os.environ.get(k))
 PY
 
+TRAIN_ARGS=()
+if [[ "$MULTI_GPU" == "1" ]]; then
+  TRAIN_ARGS+=(--multi-gpu)
+fi
+
 python scripts/train.py \
   --data-root "$DATA_ROOT" \
   --out-dir "$OUT_DIR" \
@@ -98,9 +105,10 @@ python scripts/train.py \
   --amp-dtype bf16 \
   --input-norm-mode coupled_target_max \
   --crop-shape "$CROP_D" "$CROP_H" "$CROP_W" \
-  --crop-focus center \
+  --crop-focus "$CROP_FOCUS" \
   --arch resunet3d \
   --base-channels "$BASE_CHANNELS" \
   --output-activation "$OUTPUT_ACTIVATION" \
   --patience "$PATIENCE" \
-  --min-delta "$MIN_DELTA"
+  --min-delta "$MIN_DELTA" \
+  "${TRAIN_ARGS[@]}"

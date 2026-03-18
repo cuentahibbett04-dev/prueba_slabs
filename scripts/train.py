@@ -20,6 +20,29 @@ from proton_denoise.losses import PhysicsWeightedMSELoss
 from proton_denoise.model import ALLOWED_ARCHS, build_model
 
 
+def _state_dict_for_save(model: torch.nn.Module) -> dict:
+    if isinstance(model, torch.nn.DataParallel):
+        return model.module.state_dict()
+    return model.state_dict()
+
+
+def _load_state_dict_flexible(model: torch.nn.Module, state_dict: dict) -> None:
+    """Load checkpoints saved with or without DataParallel module prefix."""
+    try:
+        model.load_state_dict(state_dict)
+        return
+    except RuntimeError:
+        pass
+
+    has_module_prefix = any(str(k).startswith("module.") for k in state_dict.keys())
+    if has_module_prefix:
+        stripped = {str(k).replace("module.", "", 1): v for k, v in state_dict.items()}
+        model.load_state_dict(stripped)
+    else:
+        with_module = {f"module.{k}": v for k, v in state_dict.items()}
+        model.load_state_dict(with_module)
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -164,6 +187,15 @@ def main(args: argparse.Namespace) -> None:
         base_channels=args.base_channels,
         output_activation=args.output_activation,
     ).to(device)
+
+    if device.type == "cuda" and args.multi_gpu:
+        ngpu = torch.cuda.device_count()
+        if ngpu > 1:
+            print(f"Enabling DataParallel on {ngpu} GPUs")
+            model = torch.nn.DataParallel(model)
+        else:
+            print("multi-gpu requested but only one CUDA GPU is visible; continuing on single GPU")
+
     criterion = PhysicsWeightedMSELoss(
         alpha=args.loss_alpha,
         min_weight=args.loss_min_weight,
@@ -184,7 +216,7 @@ def main(args: argparse.Namespace) -> None:
         if not ckpt_path.exists():
             raise FileNotFoundError(f"Resume checkpoint not found: {ckpt_path}")
         ckpt = torch.load(ckpt_path, map_location="cpu")
-        model.load_state_dict(ckpt["model_state_dict"])
+        _load_state_dict_flexible(model, ckpt["model_state_dict"])
         if start_epoch <= 0:
             start_epoch = int(ckpt.get("epoch", 0))
         print(f"Resumed model from: {ckpt_path} (start_epoch={start_epoch})")
@@ -236,7 +268,7 @@ def main(args: argparse.Namespace) -> None:
 
         if (save_every > 0 and epoch % save_every == 0) or (epoch in save_epoch_set):
             ckpt_epoch = {
-                "model_state_dict": model.state_dict(),
+                "model_state_dict": _state_dict_for_save(model),
                 "epoch": epoch,
                 "val_loss": va,
                 "arch": args.arch,
@@ -257,7 +289,7 @@ def main(args: argparse.Namespace) -> None:
             best_epoch = epoch
             epochs_without_improve = 0
             ckpt = {
-                "model_state_dict": model.state_dict(),
+                "model_state_dict": _state_dict_for_save(model),
                 "epoch": epoch,
                 "val_loss": va,
                 "arch": args.arch,
@@ -294,6 +326,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--device", type=str, choices=["cuda", "cpu"], default="cuda")
+    parser.add_argument("--multi-gpu", action="store_true", help="Enable DataParallel when multiple CUDA GPUs are visible")
     parser.add_argument("--arch", type=str, choices=list(ALLOWED_ARCHS), default="resunet3d")
     parser.add_argument("--amp", action="store_true", help="Enable mixed precision on CUDA")
     parser.add_argument(
@@ -354,7 +387,7 @@ if __name__ == "__main__":
         "--crop-focus",
         type=str,
         choices=["center", "maxdose"],
-        default="center",
+        default="maxdose",
         help="Crop center strategy when --crop-shape is enabled",
     )
     parser.add_argument("--patience", type=int, default=5)

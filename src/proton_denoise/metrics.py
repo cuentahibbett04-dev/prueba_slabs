@@ -55,6 +55,9 @@ def gamma_pass_rate(
     dose_diff_percent: float = 2.0,
     distance_mm: float = 2.0,
     dose_threshold_percent: float = 10.0,
+    eval_stride: int = 1,
+    max_eval_points: int | None = None,
+    random_seed: int = 42,
 ) -> float:
     """
     Brute-force local gamma with finite neighborhood.
@@ -80,6 +83,17 @@ def gamma_pass_rate(
     eval_indices = np.argwhere(mask)
     if len(eval_indices) == 0:
         return 0.0
+
+    stride = max(int(eval_stride), 1)
+    if stride > 1:
+        eval_indices = eval_indices[::stride]
+        if len(eval_indices) == 0:
+            return 0.0
+
+    if max_eval_points is not None and int(max_eval_points) > 0 and len(eval_indices) > int(max_eval_points):
+        rng = np.random.default_rng(int(random_seed))
+        choose = rng.choice(len(eval_indices), size=int(max_eval_points), replace=False)
+        eval_indices = eval_indices[choose]
 
     passed = 0
     for z, y, x in eval_indices:
